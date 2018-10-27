@@ -1,0 +1,6 @@
+# ignore plain txt files
+*.txt
+
+# ignore temporary files
+*.asv
+*~
