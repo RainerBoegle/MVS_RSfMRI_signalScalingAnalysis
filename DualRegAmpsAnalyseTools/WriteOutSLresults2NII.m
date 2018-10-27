@@ -1,0 +1,49 @@
+function V_out = WriteOutSLresults2NII(Data,SLightDef,OutputPath)
+% This function can be used to output any searchlight results.
+% This is a very low-level function taking the data vector "Data" 
+% and the corresponding searchlight definition struct "SLightDef"
+% to write the data back to a 3D volume that can be written out.
+% "OutputPath" indicates the directory and filename for the output.
+%
+%
+%Usage:
+%      V_out = WriteOutSLresults2NII(Data,SLightDef,OutputPath);
+%
+%
+%V1.0
+%Date: V1.0(27.07.2015) (initial implementation based on test script for analysis of scaling data.)
+%Author: Rainer.Boegle (Rainer.Boegle@googlemail.com)
+
+%% get a spm-vol struct for preparing output
+V_out= SLightDef.V_SLmask;
+if(V_out.dt(1)<16)
+    V_out.dt(1) = 16; %not necessary but save
+end
+
+[OutputBaseDir,OutputFname,ext] = fileparts(OutputPath);
+if(isempty(OutputBaseDir))
+    OutputBaseDir = pwd;
+    OutputPath    = [OutputBaseDir,filesep,OutputFname,ext];
+    disp(['No output directory specified, will save in current directory. (',OutputPath,')']);
+if(isempty(OutputFname))
+    error(['Filename not given! (',OutputPath,')']);
+end
+if(strcmpi(ext,'.nii')||strcmpi(ext,'.img'))
+    V_out.fname = OutputPath;
+else
+    warning('MATLAB:wrongfileextension',['File extension "',ext,'" is unknown, changing to ".nii".']);
+    ext = '.nii';
+    OutputPath  = [OutputBaseDir,filesep,OutputFname,ext];
+    V_out.fname = OutputPath;
+end
+
+%% prepare 3D volume
+Y = zeros(size(SLightDef.SLmaskRaw));
+Y(SLightDef.SLmaskRaw~=0) = Data;
+Y = reshape(Y,V_out.dim);
+
+%% write out to nifti
+disp(['Writing out "',OutputFname,ext,'" to directory "',OutputBaseDir,'".']);
+V_out = spm_write_vol(V_out,Y);
+
+end

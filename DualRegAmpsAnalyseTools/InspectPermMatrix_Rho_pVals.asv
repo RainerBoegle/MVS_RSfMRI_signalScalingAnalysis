@@ -1,0 +1,43 @@
+function [H,ax1,ax2,ax3,ax4] = InspectPermMatrix_Rho_pVals(MVSscalingTest)
+% This function can be used to inspect the permutation matrix based
+% correlations of the covariates with themselves in their UNPERMUTED form.
+% 
+% This is useful to see if the covariates are sufficiently dissimilar to
+% allow a permutation test. If they are not sufficiently dissimilar, then
+% their correlations will be mediocre to high and their p-values might be
+% near significant. This is bad, because the permutation test can not do
+% what it is supposed to do, i.e. see if the correlation that we got might
+% occur at random, which can only be tested if permutation of covariates is
+% sufficiently different from unpermuted covariates.
+% NB: if this is the case then this might lead to non-significant tests
+%     although there might be a valid relationship present.
+% NB2:In this case a correlation might also be the wrong kind of measure.
+%
+%
+%Usage:
+%       [H,ax1,ax2,ax3,ax4] = InspectPermMatrix_Rho_pVals(MVSscalingTest);
+%
+%
+%V1.0
+%Date: V1.0(24.07.2015) (initial implementation based on test script.)
+%Author: Rainer.Boegle (Rainer.Boegle@googlemail.com)
+
+%% check that we have to data that we need
+if(isstruct(MVSscalingTest.PermTest))
+    if(isfield(MVSscalingTest.PermTest,'PermMatrix_Rho_pVals'))
+        x = 0.5:0.25:(size(MVSscalingTest.PermTest.PermMatrix_Rho_pVals,2)+0.5);
+        H = figure(42); clf;
+        ax1 = subplot(2,2,1); boxplot(MVSscalingTest.PermTest.PermMatrix_Rho_pVals(:,:,1,1),'notch','on','labels',MVSscalingTest.PermTest.CovarsStruct.CovarName); title('Pearson correlation of covariates with PERMUTED covariates'); ylabel('Rho'); ylim([-1.01; 1.01]); hold on;
+        ax1 = subplot(2,2,1); plot(
+        ax2 = subplot(2,2,2); boxplot(MVSscalingTest.PermTest.PermMatrix_Rho_pVals(:,:,1,2),'notch','on','labels',MVSscalingTest.PermTest.CovarsStruct.CovarName); title('Spearman (RANK) correlation of covariates with PERMUTED covariates'); ylabel('Rho'); ylim([-1.01; 1.01]);
+        ax3 = subplot(2,2,3); boxplot(MVSscalingTest.PermTest.PermMatrix_Rho_pVals(:,:,2,1),'notch','on','labels',MVSscalingTest.PermTest.CovarsStruct.CovarName); ylabel('P-Vals'); ylim([0; 1.01]);
+        ax4 = subplot(2,2,4); boxplot(MVSscalingTest.PermTest.PermMatrix_Rho_pVals(:,:,2,2),'notch','on','labels',MVSscalingTest.PermTest.CovarsStruct.CovarName); ylabel('P-Vals'); ylim([0; 1.01]);
+        linkaxes([ax1,ax2,ax3,ax4],'x'); %if one covariate is picked out then let all subplots focus on that one too.
+    else
+        error('In structure "MVSscalingTest.PermTest" field "PermMatrix_Rho_pVals" expected for plot, but NOT FOUND!');
+    end
+else
+    error('In structure "MVSscalingTest" field "PermTest" expected, but NOT FOUND! I.e. no permtest set up therefore no covariates.');
+end
+
+end

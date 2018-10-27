@@ -1,0 +1,208 @@
+function [AdjAmps,OrgAmps,AdjValues,MaskLinInds,DualRegAmpsFilePath,AdjustDataPaths,MaskPath,PrefixStr] = CalcAdjDualRegAmps(DualRegAmpsFilePath,AdjustDataPaths,MaskPath,PrefixStr)
+% This function calculates the adjusted dual regression amplitudes given the amplitudes and the
+% adjustment values as NIFTI-files and including a mask. 
+% If no mask is given then all data is used, otherwise everything outside the mask is set to NaN.
+% A prefix string can be given then the results will be written out to the directory where the input
+% is coming from with the prefix added. (If no prefix is given then the prefix "Adj_" will be used.)
+%
+% It is expected that the DualRegAmpsFilePath contains the path to a 4D-NIFTI as output by
+% dual-regression contained in FSL with MELODIC. (e.g. "dr_stage2_ic????.nii")
+%
+% AdjustDataPaths is expected to be a cellstring containing the adjustment values, e.g. stdev of to
+% complete timeseries or the residuals for each input that was used in the dual regression, i.e.
+% corresponding the each volume that is contained in the 4D-NIFTI (e.g. "dr_stage2_ic????.nii") pointed to by DualRegAmpsFilePath.
+% Each entry in the cellstr should be a 3D-NIFTI file!
+%
+% MaskPath points to a [0,1]-Mask, -a 3D NIFTI file. 
+% (If not input then you will be prompted to select one and you can just close the window, if you want the mask to be created automatically.)
+% (If you want to have the mask created automatically from the data then input "[]" empty in the place of the mask.)
+%
+% PrefixStr is expected to be a string, e.g. something like 'StdevAdj_' or 'ResStdevAdj_'.
+% If not input OR empty then then it will be repaced with 'Adj_' such that no file is overwritten.
+%
+%
+%Usage:
+%      [AdjAmps,OrgAmps] = CalcAdjDualRegAmps(DualRegAmpsFilePath,AdjustDataPaths,MaskPath,PrefixStr);
+%
+%
+%V1.0
+%Date: V1.0(20.09.2015) (initial implementation based on test script for analysis of scaling data.)
+%Author: Rainer.Boegle (Rainer.Boegle@googlemail.com)
+
+%% check inputs
+%original amplitudes
+try
+    [BaseDirOrgAmps,fNameOrgAmps,ext] = fileparts(DualRegAmpsFilePath);
+    if(length(ext)~=length('.nii'))
+        if(strcmp(ext(length('.nii')+1),','))
+            ext = ext(1:length('.nii'));
+            DualRegAmpsFilePath = [BaseDirOrgAmps,filesep,fNameOrgAmps,ext];
+        end
+    end
+catch CATCH_DualRegAmpsFilePath
+    disp_catch(CATCH_DualRegAmpsFilePath,[mfilename,'>DualRegAmpsFilePath'],'CATCH_DualRegAmpsFilePath');
+    DualRegAmpsFilePath = spm_select(1,'any','Select 4D-NIFTI containing DualReg Amplitudes...');
+    [BaseDirOrgAmps,fNameOrgAmps,ext] = fileparts(DualRegAmpsFilePath);
+end
+disp('Loading DualRegAmps...');
+V_OrgAmps  = spm_vol(DualRegAmpsFilePath);
+OrgAmpsNII = nifti(DualRegAmpsFilePath);
+OrgAmps4D  = OrgAmpsNII.dat(:,:,:,:);     
+
+%adjustment values
+try
+    if(iscellstr(AdjustDataPaths))
+        if(length(AdjustDataPaths)~=OrgAmpsNII.dat.dim(4))
+            if(length(AdjustDataPaths)==1) %if it is one 4D-NIFTI then that is fine as well
+                AdjValuesNII = nifti(AdjustDataPaths{1});
+                if(AdjValuesNII.dat.dim(4)~=OrgAmpsNII.dat.dim(4))
+                    error('AdjustValues have to be a cellstring pointing to 3D-NIFTI files matching the 4D-DualRegAmps in size of 4thDim OR one 4D-NIFTI matching the 4D-DualRegAmps in size.');
+                else
+                    disp('Collecting AdjustValues data from 4D-NIFTI file...');
+                    AdjValues4D = AdjValuesNII.dat(:,:,:,:);
+                end
+            else
+                error('AdjustValues have to be a cellstring pointing to 3D-NIFTI files matching the 4D-DualRegAmps in size of 4thDim OR one 4D-NIFTI matching the 4D-DualRegAmps in size.');
+            end
+        else
+            disp('Collecting AdjustValues data from 3D-NIFTI files...');
+            AdjValuesNII= nifti(AdjustDataPaths{1});
+            AdjValues4D = zeros([AdjValuesNII.dat.dim,length(AdjustDataPaths)]);
+            for IndFile = 1:length(AdjustDataPaths)
+                AdjValuesNII = nifti(AdjustDataPaths{IndFile});
+                AdjValues4D(:,:,:,IndFile) = AdjValuesNII.dat(:,:,:);
+            end
+        end
+    else
+        if(ischar(AdjustDataPaths))%assume 4D-NIFTI, otherwise error
+            AdjValuesNII = nifti(AdjustDataPaths);
+            if(length(AdjValuesNII)~=OrgAmpsNII.dat.dim(4))
+                if(length(AdjValuesNII)~=1)
+                    error('AdjustValues have to be a cellstring pointing to 3D-NIFTI files matching the 4D-DualRegAmps in size of 4thDim OR one 4D-NIFTI matching the 4D-DualRegAmps in size.');
+                else
+                    disp('Collecting 4D-AdjustValues data from NIFTI file...');
+                    AdjValues4D = AdjValuesNII.dat(:,:,:,:);
+                end
+            else
+                disp('Collecting AdjustValues data from 3D-NIFTI files...');
+                AdjValues4D = zeros([AdjValuesNII.dat.dim,length(AdjustDataPaths)]);
+                for IndFile = 1:length(AdjValuesNII)
+                	AdjValues4D(:,:,:,IndFile) = AdjValuesNII(IndFile).dat(:,:,:);
+            end
+        else
+            error('AdjustValues have to be a cellstring pointing to 3D-NIFTI files matching the 4D-DualRegAmps in size of 4thDim OR one 4D-NIFTI matching the 4D-DualRegAmps in size.');
+        end
+    end
+catch CATCH_AdjustDataPaths
+    disp_catch(CATCH_AdjustDataPaths,[mfilename,'>AdjustDataPaths'],'CATCH_AdjustDataPaths');
+    AdjustDataPaths = cellstr(spm_select(Inf,'any','Select Adjustment Values NIFTI files...'));
+    if(iscellstr(AdjustDataPaths))
+        if(length(AdjustDataPaths)~=OrgAmpsNII.dat.dim(4))
+            if(length(AdjustDataPaths)==1) %if it is one 4D-NIFTI then that is fine as well
+                AdjValuesNII = nifti(AdjustDataPaths{1});
+                if(AdjValuesNII.dat.dim(4)~=OrgAmpsNII.dat.dim(4))
+                    error('AdjustValues have to be a cellstring pointing to 3D-NIFTI files matching the 4D-DualRegAmps in size of 4thDim OR one 4D-NIFTI matching the 4D-DualRegAmps in size.');
+                else
+                    disp('Collecting AdjustValues data from 4D-NIFTI file...');
+                    AdjValues4D = AdjValuesNII.dat(:,:,:,:);
+                end
+            else
+                error('AdjustValues have to be a cellstring pointing to 3D-NIFTI files matching the 4D-DualRegAmps in size of 4thDim OR one 4D-NIFTI matching the 4D-DualRegAmps in size.');
+            end
+        else %3D-NIFTIs as expected (hopefully)
+            disp('Collecting AdjustValues data from 3D-NIFTI files...');
+            AdjValuesNII= nifti(AdjustDataPaths{1});
+            AdjValues4D = zeros([AdjValuesNII.dat.dim,length(AdjustDataPaths)]);
+            for IndFile = 1:length(AdjustDataPaths)
+                AdjValuesNII = nifti(AdjustDataPaths{IndFile});
+                AdjValues4D(:,:,:,IndFile) = AdjValuesNII.dat(:,:,:);
+            end
+        end
+    end
+end
+
+%Mask
+try
+    if(isempty(MaskPath)) %self determine
+        disp('Determine mask from DualRegAmps and AdjustValues...')
+        Mask3D = sum(OrgAmps4D~=0,4)+sum(AdjValues4D~=0,4);
+    else
+        MaskNII = nifti(MaskPath);
+        Mask3D  = MaskNII.dat(:,:,:);
+    end
+catch CATCH_MaskPath
+    disp_catch(CATCH_MaskPath,[mfilename,'>MaskPath'],'CATCH_MaskPath');
+    MaskPath= spm_select(1,'image','Select Mask NIFTI (or close to not use mask/self determine)...');
+    if(isempty(MaskPath)) %self determine
+        disp('Determine mask from DualRegAmps and AdjustValues...')
+        Mask3D = sum(OrgAmps4D~=0,4)+sum(AdjValues4D~=0,4);
+    else
+        MaskNII = nifti(MaskPath);
+        Mask3D  = MaskNII.dat(:,:,:);
+    end
+end
+MaskLinInds = find(Mask3D(:)~=0);
+
+%Prefix string
+try
+    if(isempty(PrefixStr))
+        PrefixStr = 'Adj_';
+    end
+catch CATCH_PrefixStr
+    disp_catch(CATCH_PrefixStr,[mfilename,'>PrefixStr'],'CATCH_PrefixStr');
+    PrefixStr = 'Adj_';
+end
+disp(['Using prefix string "',PrefixStr,'" for output...']);
+
+%% check 3D dimensions
+for Ind = 1:3
+    if(size(OrgAmps4D,Ind)~=size(AdjValues4D,Ind))
+        error(['Data dimension ',num2str(Ind),' not equal across Amps & AdjValues!']);
+    end
+    if(size(OrgAmps4D,Ind)~=size(Mask3D,Ind))
+        error(['Data dimension ',num2str(Ind),' not equal across Amps & Mask!']);
+    end
+end
+
+%% get data in mask
+OrgAmps2D  = reshape(OrgAmps4D  ,[],size(OrgAmps4D,4));
+AdjValues2D= reshape(AdjValues4D,[],size(AdjValues4D,4));
+
+OrgAmps  = OrgAmps2D(  MaskLinInds,:);
+AdjValues= AdjValues2D(MaskLinInds,:);
+
+%% adjust data by scaling with adjust values
+AdjAmps = OrgAmps./AdjValues;
+
+%% output as NIFTI
+Vout = V_OrgAmps;
+disp(['Writing 4D-NIFTI containing Adjusted Amplitudes to "',PrefixStr,fNameOrgAmps,ext,'" in directory "',BaseDirOrgAmps,'"...']);   
+for IndOut = 1:size(OrgAmps4D,4)
+    %make adjustments to volume struct
+    if(length(Vout)~=size(OrgAmps4D,4))
+        if(IndOut>1)
+            Vout(IndOut) = Vout(IndOut-1);
+        end
+    end
+    if(isfield(Vout(IndOut),'private'))
+        Vout(IndOut) = rmfield(Vout(IndOut),'private');
+    end
+    if(Vout(IndOut).dt(1)<16)
+        Vout(IndOut).dt(1) = 16; %safe in terms of resolution/bit depth.
+    end
+    Vout(IndOut).n(1)    = IndOut;
+    Vout(IndOut).fname   = [BaseDirOrgAmps,filesep,PrefixStr,fNameOrgAmps,ext]; %add prefix string
+    Vout(IndOut).descrip = ['Adjusted DualRegAmplitudes "PrefixStr"'];
+    
+    %prep output data
+    Y = zeros(size(OrgAmps4D,1),size(OrgAmps4D,2),size(OrgAmps4D,3));
+    Y(MaskLinInds) = AdjAmps(:,IndOut);
+    
+    %write out
+    Vout(IndOut) = spm_write_vol(Vout(IndOut),Y);
+end
+
+%% done
+disp('Done with adjusting DualRegAmplitudes.');
+
+end
